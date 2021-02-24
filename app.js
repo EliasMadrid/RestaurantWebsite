@@ -3,62 +3,36 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
-
-//var redis = require('redis');
 var session = require('express-session');
-let RedisStore = require('connect-redis')(session);
-var formidable = require('formidable');
-var adminRouter = require ('./routes/admin');
-
-//var connectaRedis = require('connect-redis');
-//var RedisStore = connectaRedis(session);
-
-
-
-var indexRouter = require('./routes/index');
-var adminRouter = require('./routes/admin');
+var RedisStore = require('connect-redis')(session);
+var http = require('http');
+var socket = require('socket.io');
+var bodyParser = require('body-parser');
 
 var app = express();
-// codigo para salvar dados do menu no banco
-app.use(function(req, res, next){
-  if(req.method === 'POST'){
-   var form = formidable.IncomingForm({
-     uploadDir: path.join(__dirname, "/public/images"),
-     keepExtensions: true
-   });
-   form.parse(req, function(err, fields, files){
-     req.fields = fields;
-     req.files = files;
+var http = http.Server(app);
+var io = socket(http);
 
-     next();
-   });
-  } else{
-    next();
-  }
-});
+var indexRouter = require('./routes/index')(io);
+var adminRouter = require('./routes/admin')(io);
+
+app.use(session({
+    store: new RedisStore({
+      host:'localhost',
+      port:6379
+    }),
+    secret: 'p@ssw0rd',
+    resave: true,
+    saveUninitialized: true
+}));
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
-// VIDEO N 175
-
-/*app.use(session ({
-    store: new RedisStore({
-    host: 'localhost',
-    port: 6379
-  }),
-    secret:'p@ssw0rd',
-    resave:true,
-    saveUninitialized:true
-}));*/
-
-
-
-
 app.use(logger('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -66,7 +40,7 @@ app.use('/', indexRouter);
 app.use('/admin', adminRouter);
 
 // catch 404 and forward to error handler
-  app.use(function(req, res, next) {
+app.use(function(req, res, next) {
   next(createError(404));
 });
 
@@ -79,8 +53,22 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   res.render('error');
- 
-  
 });
 
-module.exports = app;
+io.on('connection', function (socket) {
+
+  console.log('a user connected');
+
+  socket.on('disconnect', function () {
+
+    console.log('user disconnected');
+
+  });
+
+});
+
+http.listen(3000, ()=>{
+
+  console.log('Servidor em execução...');
+
+});
